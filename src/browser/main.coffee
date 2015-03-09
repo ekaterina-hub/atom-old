@@ -67,11 +67,18 @@ setupCrashReporter = ->
   crashReporter.start(productName: 'Atom', companyName: 'GitHub')
 
 setupAtomHome = ->
-  return if process.env.ATOM_HOME
-
-  atomHome = path.join(app.getHomeDir(), '.atom')
-  try
-    atomHome = fs.realpathSync(atomHome)
+  portablePath =
+    if process.platform == 'darwin'
+      process.resourcesPath.slice(0, -19) + '/.atom'
+    else
+      process.resourcesPath.slice(0, -10) + '/.atom'
+  if fs.existsSync(portablePath)
+    atomHome = portablePath
+  else
+    return if process.env.ATOM_HOME
+    atomHome = path.join(app.getHomeDir(), '.atom')
+    try
+      atomHome = fs.realpathSync(atomHome)
   process.env.ATOM_HOME = atomHome
 
 setupCoffeeCache = ->
