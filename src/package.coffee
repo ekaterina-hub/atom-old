@@ -176,7 +176,7 @@ class Package
         atom.config.setSchema @name, {type: 'object', properties: @mainModule.config}
       else if @mainModule.configDefaults? and typeof @mainModule.configDefaults is 'object'
         deprecate """Use a config schema instead. See the configuration section
-        of https://atom.io/docs/latest/creating-a-package and
+        of https://atom.io/docs/latest/hacking-atom-package-word-count and
         https://atom.io/docs/api/latest/Config for more details"""
         atom.config.setDefaults(@name, @mainModule.configDefaults)
       @mainModule.activateConfig?()
@@ -223,12 +223,16 @@ class Package
 
   activateServices: ->
     for name, {versions} of @metadata.providedServices
+      servicesByVersion = {}
       for version, methodName of versions
-        @activationDisposables.add atom.packages.serviceHub.provide(name, version, @mainModule[methodName]())
+        if typeof @mainModule[methodName] is 'function'
+          servicesByVersion[version] = @mainModule[methodName]()
+      @activationDisposables.add atom.packages.serviceHub.provide(name, servicesByVersion)
 
     for name, {versions} of @metadata.consumedServices
       for version, methodName of versions
-        @activationDisposables.add atom.packages.serviceHub.consume(name, version, @mainModule[methodName].bind(@mainModule))
+        if typeof @mainModule[methodName] is 'function'
+          @activationDisposables.add atom.packages.serviceHub.consume(name, version, @mainModule[methodName].bind(@mainModule))
     return
 
   loadKeymaps: ->
@@ -236,12 +240,14 @@ class Package
       @keymaps = (["#{atom.packages.resourcePath}#{path.sep}#{keymapPath}", keymapObject] for keymapPath, keymapObject of packagesCache[@name].keymaps)
     else
       @keymaps = @getKeymapPaths().map (keymapPath) -> [keymapPath, CSON.readFileSync(keymapPath) ? {}]
+    return
 
   loadMenus: ->
     if @bundledPackage and packagesCache[@name]?
       @menus = (["#{atom.packages.resourcePath}#{path.sep}#{menuPath}", menuObject] for menuPath, menuObject of packagesCache[@name].menus)
     else
       @menus = @getMenuPaths().map (menuPath) -> [menuPath, CSON.readFileSync(menuPath) ? {}]
+    return
 
   getKeymapPaths: ->
     keymapsDirPath = path.join(@path, 'keymaps')
@@ -445,6 +451,8 @@ class Package
                 @activateNow()
                 break
               currentTarget = currentTarget.parentElement
+            return
+    return
 
   getActivationCommands: ->
     return @activationCommands if @activationCommands?
@@ -503,6 +511,7 @@ class Package
         for modulePath in fs.listSync(nodeModulesPath)
           nativeModulePaths.push(modulePath) if @isNativeModule(modulePath)
           traversePath(path.join(modulePath, 'node_modules'))
+      return
 
     traversePath(path.join(@path, 'node_modules'))
     nativeModulePaths
@@ -561,6 +570,14 @@ class Package
       detail = "#{error.message} in #{location}"
       stack = """
         SyntaxError: #{error.message}
+          at #{location}
+      """
+    else if error.less and error.filename and error.column? and error.line?
+      # Less errors
+      location = "#{error.filename}:#{error.line}:#{error.column}"
+      detail = "#{error.message} in #{location}"
+      stack = """
+        LessError: #{error.message}
           at #{location}
       """
     else

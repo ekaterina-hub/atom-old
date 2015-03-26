@@ -67,6 +67,8 @@ class Selection extends Model
         Grim.deprecate("Use Selection::onDidChangeRange instead. Call ::getScreenRange() yourself in your callback if you need the range.")
       when 'destroyed'
         Grim.deprecate("Use Selection::onDidDestroy instead.")
+      else
+        Grim.deprecate("Selection::on is deprecated. Use documented event subscription methods instead.")
 
     super
 
@@ -100,7 +102,7 @@ class Selection extends Model
     bufferRange = Range.fromObject(bufferRange)
     @needsAutoscroll = options.autoscroll
     options.reversed ?= @isReversed()
-    @editor.destroyFoldsIntersectingBufferRange(bufferRange) unless options.preserveFolds
+    @editor.destroyFoldsContainingBufferRange(bufferRange) unless options.preserveFolds
     @modifySelection =>
       needsFlash = options.flash
       delete options.flash if options.flash?
@@ -183,7 +185,7 @@ class Selection extends Model
 
   # Public: Clears the selection, moving the marker to the head.
   clear: ->
-    @marker.setProperties(goalBufferRange: null)
+    @marker.setProperties(goalScreenRange: null)
     @marker.clearTail() unless @retainSelection
     @finalize()
 
@@ -251,8 +253,7 @@ class Selection extends Model
 
   # Public: Selects all the text in the buffer.
   selectAll: ->
-    @editor.unfoldAll()
-    @setBufferRange(@editor.buffer.getRange(), autoscroll: false, preserveFolds: true)
+    @setBufferRange(@editor.buffer.getRange(), autoscroll: false)
 
   # Public: Selects all the text from the current cursor position to the
   # beginning of the line.
@@ -537,6 +538,7 @@ class Selection extends Model
     for row in [start..end]
       if matchLength = buffer.lineForRow(row).match(leadingTabRegex)?[0].length
         buffer.delete [[row, 0], [row, matchLength]]
+    return
 
   # Public: Sets the indentation level of all selected rows to values suggested
   # by the relevant grammars.
@@ -619,6 +621,7 @@ class Selection extends Model
         currentIndentLevel = @editor.indentLevelForLine(lines[i])
         indentLevel = Math.max(0, currentIndentLevel + indentAdjustment)
         lines[i] = line.replace(/^[\t ]+/, @editor.buildIndentString(indentLevel))
+    return
 
   # Indent the current line(s).
   #
@@ -650,6 +653,7 @@ class Selection extends Model
     [start, end] = @getBufferRowRange()
     for row in [start..end]
       @editor.buffer.insert([row, 0], @editor.getTabText()) unless @editor.buffer.lineLengthForRow(row) == 0
+    return
 
   ###
   Section: Managing multiple selections
@@ -657,39 +661,43 @@ class Selection extends Model
 
   # Public: Moves the selection down one row.
   addSelectionBelow: ->
-    range = (@getGoalBufferRange() ? @getBufferRange()).copy()
+    range = (@getGoalScreenRange() ? @getScreenRange()).copy()
     nextRow = range.end.row + 1
 
-    for row in [nextRow..@editor.getLastBufferRow()]
+    for row in [nextRow..@editor.getLastScreenRow()]
       range.start.row = row
       range.end.row = row
-      clippedRange = @editor.clipBufferRange(range)
+      clippedRange = @editor.clipScreenRange(range, skipSoftWrapIndentation: true)
 
       if range.isEmpty()
         continue if range.end.column > 0 and clippedRange.end.column is 0
       else
         continue if clippedRange.isEmpty()
 
-      @editor.addSelectionForBufferRange(range, goalBufferRange: range)
+      @editor.addSelectionForScreenRange(clippedRange, goalScreenRange: range)
       break
+
+    return
 
   # Public: Moves the selection up one row.
   addSelectionAbove: ->
-    range = (@getGoalBufferRange() ? @getBufferRange()).copy()
+    range = (@getGoalScreenRange() ? @getScreenRange()).copy()
     previousRow = range.end.row - 1
 
     for row in [previousRow..0]
       range.start.row = row
       range.end.row = row
-      clippedRange = @editor.clipBufferRange(range)
+      clippedRange = @editor.clipScreenRange(range, skipSoftWrapIndentation: true)
 
       if range.isEmpty()
         continue if range.end.column > 0 and clippedRange.end.column is 0
       else
         continue if clippedRange.isEmpty()
 
-      @editor.addSelectionForBufferRange(range, goalBufferRange: range)
+      @editor.addSelectionForScreenRange(clippedRange, goalScreenRange: range)
       break
+
+    return
 
   # Public: Combines the given selection into this selection and then destroys
   # the given selection.
@@ -697,12 +705,14 @@ class Selection extends Model
   # * `otherSelection` A {Selection} to merge with.
   # * `options` (optional) {Object} options matching those found in {::setBufferRange}.
   merge: (otherSelection, options) ->
-    myGoalBufferRange = @getGoalBufferRange()
-    otherGoalBufferRange = otherSelection.getGoalBufferRange()
-    if myGoalBufferRange? and otherGoalBufferRange?
-      options.goalBufferRange = myGoalBufferRange.union(otherGoalBufferRange)
+    myGoalScreenRange = @getGoalScreenRange()
+    otherGoalScreenRange = otherSelection.getGoalScreenRange()
+
+    if myGoalScreenRange? and otherGoalScreenRange?
+      options.goalScreenRange = myGoalScreenRange.union(otherGoalScreenRange)
     else
-      options.goalBufferRange = myGoalBufferRange ? otherGoalBufferRange
+      options.goalScreenRange = myGoalScreenRange ? otherGoalScreenRange
+
     @setBufferRange(@getBufferRange().union(otherSelection.getBufferRange()), options)
     otherSelection.destroy()
 
@@ -764,6 +774,6 @@ class Selection extends Model
   plantTail: ->
     @marker.plantTail()
 
-  getGoalBufferRange: ->
-    if goalBufferRange = @marker.getProperties().goalBufferRange
-      Range.fromObject(goalBufferRange)
+  getGoalScreenRange: ->
+    if goalScreenRange = @marker.getProperties().goalScreenRange
+      Range.fromObject(goalScreenRange)

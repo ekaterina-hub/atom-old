@@ -83,6 +83,7 @@ class Project extends Model
 
   destroyUnretainedBuffers: ->
     buffer.destroy() for buffer in @getBuffers() when not buffer.isRetained()
+    return
 
   ###
   Section: Serialization
@@ -118,9 +119,14 @@ class Project extends Model
   onDidChangePaths: (callback) ->
     @emitter.on 'did-change-paths', callback
 
+  onDidAddBuffer: (callback) ->
+    @emitter.on 'did-add-buffer', callback
+
   on: (eventName) ->
     if eventName is 'path-changed'
       Grim.deprecate("Use Project::onDidChangePaths instead")
+    else
+      Grim.deprecate("Project::on is deprecated. Use documented event subscription methods instead.")
     super
 
   ###
@@ -288,7 +294,6 @@ class Project extends Model
   # * `relativePath` {String} The relative path from the project directory to
   #   the given path.
   relativizePath: (fullPath) ->
-    return fullPath if fullPath?.match(/[A-Za-z0-9+-.]+:\/\//) # leave path alone if it has a scheme
     for rootDirectory in @rootDirectories
       relativePath = rootDirectory.relativize(fullPath)
       return [rootDirectory.getPath(), relativePath] unless relativePath is fullPath
@@ -435,6 +440,7 @@ class Project extends Model
     @buffers.splice(index, 0, buffer)
     @subscribeToBuffer(buffer)
     @emit 'buffer-created', buffer
+    @emitter.emit 'did-add-buffer', buffer
     buffer
 
   # Removes a {TextBuffer} association from the project.
@@ -476,7 +482,7 @@ class Project extends Model
   # Deprecated: delegate
   registerOpener: (opener) ->
     deprecate("Use Workspace::addOpener instead")
-    atom.workspace.registerOpener(opener)
+    atom.workspace.addOpener(opener)
 
   # Deprecated: delegate
   unregisterOpener: (opener) ->
@@ -485,10 +491,10 @@ class Project extends Model
 
   # Deprecated: delegate
   eachEditor: (callback) ->
-    deprecate("Use Workspace::eachEditor instead")
-    atom.workspace.eachEditor(callback)
+    deprecate("Use Workspace::observeTextEditors instead")
+    atom.workspace.observeTextEditors(callback)
 
   # Deprecated: delegate
   getEditors: ->
-    deprecate("Use Workspace::getEditors instead")
-    atom.workspace.getEditors()
+    deprecate("Use Workspace::getTextEditors instead")
+    atom.workspace.getTextEditors()

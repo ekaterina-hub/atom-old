@@ -124,6 +124,8 @@ class Marker
         Grim.deprecate("Use Marker::onDidChange instead")
       when 'destroyed'
         Grim.deprecate("Use Marker::onDidDestroy instead")
+      else
+        Grim.deprecate("Marker::on is deprecated. Use documented event subscription methods instead.")
 
     EmitterMixin::on.apply(this, arguments)
 
@@ -394,6 +396,7 @@ class Marker
       for event in deferredChangeEvents
         @emit 'changed', event
         @emitter.emit 'did-change', event
+    return
 
   getPixelRange: ->
     @displayBuffer.pixelRangeForScreenRange(@getScreenRange(), false)

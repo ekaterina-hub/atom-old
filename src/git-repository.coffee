@@ -96,7 +96,8 @@ class GitRepository
       @subscriptions.add new Disposable(-> window.removeEventListener 'focus', onWindowFocus)
 
     if @project?
-      @subscriptions.add @project.eachBuffer (buffer) => @subscribeToBuffer(buffer)
+      @project.getBuffers().forEach (buffer) => @subscribeToBuffer(buffer)
+      @subscriptions.add @project.onDidAddBuffer (buffer) => @subscribeToBuffer(buffer)
 
   # Public: Destroy this {GitRepository} object.
   #
@@ -167,6 +168,12 @@ class GitRepository
   ###
   Section: Repository Details
   ###
+
+  # Public: A {String} indicating the type of version control system used by
+  # this repository.
+  #
+  # Returns `"git"`.
+  getType: -> 'git'
 
   # Public: Returns the {String} path of the repository.
   getPath: ->

@@ -457,6 +457,10 @@ class TextEditor extends Model
   onDidChangeScrollLeft: (callback) ->
     @emitter.on 'did-change-scroll-left', callback
 
+  # TODO Remove once the tabs package no longer uses .on subscriptions
+  onDidChangeIcon: (callback) ->
+    @emitter.on 'did-change-icon', callback
+
   on: (eventName) ->
     switch eventName
       when 'title-changed'
@@ -511,6 +515,9 @@ class TextEditor extends Model
         deprecate("Use TextEditor::onDidChangeScrollTop instead")
       when 'scroll-left-changed'
         deprecate("Use TextEditor::onDidChangeScrollLeft instead")
+
+      else
+        deprecate("TextEditor::on is deprecated. Use documented event subscription methods instead.")
 
     EmitterMixin::on.apply(this, arguments)
 
@@ -835,7 +842,8 @@ class TextEditor extends Model
   #      {Number} index of that selection.
   mutateSelectedText: (fn) ->
     @mergeIntersectingSelections =>
-      @transact => fn(selection, index) for selection, index in @getSelections()
+      @transact =>
+        fn(selection, index) for selection, index in @getSelections()
 
   # Move lines intersection the most recent selection up by one row in screen
   # coordinates.
@@ -971,6 +979,7 @@ class TextEditor extends Model
         selection.setBufferRange(selectedBufferRange.translate([delta, 0]))
         for [foldStartRow, foldEndRow] in foldedRowRanges
           @createFold(foldStartRow + delta, foldEndRow + delta)
+      return
 
   # Deprecated: Use {::duplicateLines} instead.
   duplicateLine: ->
@@ -1006,6 +1015,7 @@ class TextEditor extends Model
         while ++row < end.row
           @addSelectionForBufferRange([[row, 0], [row, Infinity]])
         @addSelectionForBufferRange([[end.row, 0], [end.row, end.column]]) unless end.column is 0
+      return
 
   # Extended: For each selection, transpose the selected text.
   #
@@ -1274,6 +1284,14 @@ class TextEditor extends Model
   #
   # Returns a {Point}.
   clipScreenPosition: (screenPosition, options) -> @displayBuffer.clipScreenPosition(screenPosition, options)
+
+  # Extended: Clip the start and end of the given range to valid positions on screen.
+  # See {::clipScreenPosition} for more information.
+  #
+  # * `range` The {Range} to clip.
+  # * `options` (optional) See {::clipScreenPosition} `options`.
+  # Returns a {Range}.
+  clipScreenRange: (range, options) -> @displayBuffer.clipScreenRange(range, options)
 
   ###
   Section: Decorations
@@ -1764,7 +1782,7 @@ class TextEditor extends Model
 
   # Extended: Get an Array of all {Cursor}s.
   getCursors: ->
-    cursor for cursor in @cursors
+    @cursors.slice()
 
   # Extended: Get all {Cursors}s, ordered by their position in the buffer
   # instead of the order in which they were added.
@@ -1807,6 +1825,7 @@ class TextEditor extends Model
         cursor.destroy()
       else
         positions[position] = true
+    return
 
   preserveCursorPositionOnBufferReload: ->
     cursorPosition = null
@@ -1871,6 +1890,7 @@ class TextEditor extends Model
           selections[i].setBufferRange(bufferRange, options)
         else
           @addSelectionForBufferRange(bufferRange, options)
+      return
 
   # Essential: Get the {Range} of the most recently added selection in screen
   # coordinates.
@@ -1917,6 +1937,7 @@ class TextEditor extends Model
           selections[i].setScreenRange(screenRange, options)
         else
           @addSelectionForScreenRange(screenRange, options)
+      return
 
   # Essential: Add a selection for the given range in buffer coordinates.
   #
@@ -2144,7 +2165,7 @@ class TextEditor extends Model
   #
   # Returns: An {Array} of {Selection}s.
   getSelections: ->
-    selection for selection in @selections
+    @selections.slice()
 
   # Extended: Get all {Selection}s, ordered by their position in the buffer
   # instead of the order in which they were added.
@@ -2191,15 +2212,18 @@ class TextEditor extends Model
   expandSelectionsForward: (fn) ->
     @mergeIntersectingSelections =>
       fn(selection) for selection in @getSelections()
+      return
 
   # Calls the given function with each selection, then merges selections in the
   # reversed orientation
   expandSelectionsBackward: (fn) ->
     @mergeIntersectingSelections reversed: true, =>
       fn(selection) for selection in @getSelections()
+      return
 
   finalizeSelections: ->
     selection.finalize() for selection in @getSelections()
+    return
 
   selectionsForScreenRows: (startRow, endRow) ->
     @getSelections().filter (selection) -> selection.intersectsScreenRowRange(startRow, endRow)
@@ -2241,7 +2265,7 @@ class TextEditor extends Model
   # Returns the new {Selection}.
   addSelection: (marker, options={}) ->
     unless marker.getProperties().preserveFolds
-      @destroyFoldsIntersectingBufferRange(marker.getBufferRange())
+      @destroyFoldsContainingBufferRange(marker.getBufferRange())
     cursor = @addCursor(marker)
     selection = new Selection(_.extend({editor: this, marker, cursor}, options))
     @selections.push(selection)
@@ -2605,6 +2629,7 @@ class TextEditor extends Model
       else
         selection.copy(maintainClipboard, false)
       maintainClipboard = true
+    return
 
   # Essential: For each selection, cut the selected text.
   cutSelectedText: ->
@@ -2699,6 +2724,7 @@ class TextEditor extends Model
   # Extended: For each selection, fold the rows it intersects.
   foldSelectedLines: ->
     selection.fold() for selection in @getSelections()
+    return
 
   # Extended: Fold all foldable lines.
   foldAll: ->
@@ -2774,13 +2800,19 @@ class TextEditor extends Model
   destroyFoldWithId: (id) ->
     @displayBuffer.destroyFoldWithId(id)
 
-  # Remove any {Fold}s found that intersect the given buffer row.
+  # Remove any {Fold}s found that intersect the given buffer range.
   destroyFoldsIntersectingBufferRange: (bufferRange) ->
-    @unfoldBufferRow(bufferRange.start.row)
-    @unfoldBufferRow(bufferRange.end.row)
+    @destroyFoldsContainingBufferRange(bufferRange)
 
     for row in [bufferRange.end.row..bufferRange.start.row]
       fold.destroy() for fold in @displayBuffer.foldsStartingAtBufferRow(row)
+
+    return
+
+  # Remove any {Fold}s found that contain the given buffer range.
+  destroyFoldsContainingBufferRange: (bufferRange) ->
+    @unfoldBufferRow(bufferRange.start.row)
+    @unfoldBufferRow(bufferRange.end.row)
 
   # {Delegates to: DisplayBuffer.largestFoldContainingBufferRow}
   largestFoldContainingBufferRow: (bufferRow) ->

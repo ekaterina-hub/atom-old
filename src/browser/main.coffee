@@ -125,7 +125,6 @@ parseCommandLine = ->
   options.alias('v', 'version').boolean('v').describe('v', 'Print the version.')
   options.alias('w', 'wait').boolean('w').describe('w', 'Wait for window to be closed before returning.')
   options.string('socket-path')
-  options.boolean('multi-folder')
   args = options.argv
 
   if args.help
@@ -147,7 +146,6 @@ parseCommandLine = ->
   pidToKillWhenClosed = args['pid'] if args['wait']
   logFile = args['log-file']
   socketPath = args['socket-path']
-  enableMultiFolderProject = args['multi-folder']
 
   if args['resource-path']
     devMode = true
@@ -173,6 +171,6 @@ parseCommandLine = ->
   process.env.PATH = args['path-environment'] if args['path-environment']
 
   {resourcePath, pathsToOpen, executedFrom, test, version, pidToKillWhenClosed,
-   devMode, safeMode, newWindow, specDirectory, logFile, socketPath, enableMultiFolderProject}
+   devMode, safeMode, newWindow, specDirectory, logFile, socketPath}
 
 start()
